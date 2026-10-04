@@ -37,9 +37,11 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testSnapshotWithMultipleBlobs,
 	testUncompressedLocalCacheImportExport,
 	testUncompressedRegistryCacheImportExport,
+	testUncompressedS3CacheImportExport,
 	testZstdLocalCacheExport,
 	testZstdLocalCacheImportExport,
 	testZstdRegistryCacheImportExport,
+	testZstdS3CacheImportExport,
 	testStargzLazyInlineCacheImportExport,
 	testStargzLazyRegistryCacheImportExport,
 
@@ -65,6 +67,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 
 	// client_export_image_test.go
 	testBuildExportScratch,
+	testBuildExportUnpackWithRewriteTimestamp,
 	testBuildExportWithForeignLayer,
 	testBuildExportWithUncompressed,
 	testBuildExportZstd,
@@ -90,6 +93,12 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testExportLocalModeDeleteMultiPlatformKeepsAllPlatforms,
 	testExportLocalNoPlatformSplit,
 	testExportLocalNoPlatformSplitOverwrite,
+	testExportLocalSource,
+	testExportLocalSourceModeDelete,
+	testExportLocalSourceNotFound,
+	testExportLocalSourceMultiPlatform,
+	testExportLocalSourceNoPlatformSplit,
+	testExportTarSource,
 	testExportTarPlatformIDSanitized,
 	testExporterTargetExists,
 	testMultipleExporters,
@@ -165,11 +174,13 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 
 	// client_image_source_test.go
 	testClientGatewayCanceledCredentialsCallbackReturns,
+	testBuildWithInvalidChainID,
 	testPullWithLayerLimit,
 	testValidateDigestOrigin,
 
 	// client_local_source_test.go
 	testLocalSourceDiffer,
+	testLocalSourceFilterOpt,
 	testLocalSourceWithHardlinksFilter,
 	testLocalSymlinkEscape,
 	testMetadataOnlyLocal,
@@ -252,10 +263,12 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerCancelExecTty,
 		testClientGatewayContainerCancelOnRelease,
 		testClientGatewayContainerCancelPID1Tty,
+		testClientGatewayContainerExecLargeStdio,
 		testClientGatewayContainerExecPipe,
 		testClientGatewayContainerExecPipeRelease,
 		testClientGatewayContainerExecPipeSignalKill,
 		testClientGatewayContainerExecTty,
+		testClientGatewayContainerOutputError,
 		testClientGatewayContainerPID1Exit,
 		testClientGatewayContainerPID1Fail,
 		testClientGatewayContainerPID1Tty,
@@ -266,6 +279,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 
 		// gateway_container_mount_test.go
 		testClientGatewayContainerMounts,
+		testClientGatewayContainerReadFileSpecial,
 		testClientGatewayContainerPlatformPATH,
 		testClientGatewayContainerSecretEnv,
 

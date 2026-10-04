@@ -59,6 +59,7 @@ var allTests = integration.TestFuncs(
 
 	// dockerfile_cache_test.go
 	testCacheReleased,
+	testMissingCopySourceReleasesCache,
 	testExportCacheLoop,
 	testCacheMultiPlatformImportExport,
 	testImageManifestCacheImportExport,
@@ -133,6 +134,9 @@ var allTests = integration.TestFuncs(
 	testDockerignore,
 	testDockerignoreInvalid,
 	testDockerignoreOverride,
+
+	// dockerfile_filesize_test.go
+	testDockerfileTooLarge,
 
 	// dockerfile_export_test.go
 	testTarExporterBasic,

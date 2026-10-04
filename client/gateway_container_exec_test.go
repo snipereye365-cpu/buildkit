@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"strings"
@@ -242,6 +243,73 @@ func testClientGatewayContainerCancelPID1Tty(t *testing.T, sb integration.Sandbo
 
 	inputW.Close()
 	inputR.Close()
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+func testClientGatewayContainerExecLargeStdio(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	ctx, cancel := context.WithTimeoutCause(sb.Context(), time.Minute, errors.New("gateway stdio test timed out"))
+	defer cancel()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	product := "buildkit_test"
+
+	// Use 16 MiB to exceed the gRPC flow-control window and reproduce the
+	// bidirectional stream deadlock.
+	input := bytes.Repeat([]byte("buildkit"), 2<<20)
+	output := sha256.New()
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		st := llb.Image("busybox:latest")
+
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to marshal state")
+		}
+
+		r, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to solve")
+		}
+
+		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
+			Mounts: []client.Mount{{
+				Dest:      "/",
+				MountType: pb.MountType_BIND,
+				Ref:       r.Ref,
+			}},
+		})
+		if err != nil {
+			return nil, err
+		}
+		defer ctr.Release(context.WithoutCancel(ctx))
+
+		pid1, err := ctr.Start(ctx, client.StartRequest{
+			Args:   []string{"cat"},
+			Stdin:  io.NopCloser(bytes.NewReader(input)),
+			Stdout: &iohelper.NopWriteCloser{Writer: output},
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		if err := pid1.Wait(); err != nil {
+			return nil, err
+		}
+
+		return &client.Result{}, nil
+	}
+
+	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
+	require.NoError(t, err)
+	require.Equal(t, sha256.Sum256(input), [32]byte(output.Sum(nil)))
 
 	checkAllReleasable(t, c, sb, true)
 }
@@ -487,6 +555,71 @@ func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
 	inputW.Close()
 	inputR.Close()
 
+	checkAllReleasable(t, c, sb, true)
+}
+
+func testClientGatewayContainerOutputError(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	ctx, cancel := context.WithTimeoutCause(sb.Context(), time.Minute, errors.New("gateway output-error test timed out"))
+	defer cancel()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		def, err := llb.Image("busybox:latest").Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+		r, err := c.Solve(ctx, client.SolveRequest{Definition: def.ToPB()})
+		if err != nil {
+			return nil, err
+		}
+		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
+			Mounts: []client.Mount{{
+				Dest:      "/",
+				MountType: pb.MountType_BIND,
+				Ref:       r.Ref,
+			}},
+		})
+		if err != nil {
+			return nil, err
+		}
+		defer ctr.Release(context.WithoutCancel(ctx))
+
+		stdinReader, stdinWriter := io.Pipe()
+		defer stdinReader.Close()
+		defer stdinWriter.Close()
+		stdoutReader, stdoutWriter := io.Pipe()
+		stdoutReader.Close()
+		defer stdoutWriter.Close()
+
+		// Keep stdin open: an output error must release its cleanup waiter
+		// without waiting for the caller to close the input.
+		process, err := ctr.Start(ctx, client.StartRequest{
+			Args:   []string{"sh", "-c", "printf output; cat >/dev/null"},
+			Stdin:  stdinReader,
+			Stdout: stdoutWriter,
+		})
+		if err != nil {
+			return nil, err
+		}
+		wait := make(chan error, 1)
+		go func() { wait <- process.Wait() }()
+		select {
+		case err := <-wait:
+			if !errors.Is(err, io.ErrClosedPipe) {
+				return nil, errors.Errorf("process Wait returned %v, expected %v", err, io.ErrClosedPipe)
+			}
+		case <-ctx.Done():
+			return nil, context.Cause(ctx)
+		}
+		return &client.Result{}, nil
+	}
+
+	_, err = c.Build(ctx, SolveOpt{}, "buildkit_test", b, nil)
+	require.NoError(t, err)
 	checkAllReleasable(t, c, sb, true)
 }
 

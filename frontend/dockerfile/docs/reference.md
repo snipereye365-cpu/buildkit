@@ -1904,11 +1904,16 @@ Sets ownership of copied files. Without this flag, files are created with UID
 and GID of 0.
 
 The flag accepts usernames, group names, UIDs, or GIDs in any combination.
-If you specify only a user, the GID is set to the same numeric value as the UID.
+If you omit the group, either as `--chown=<user>` or `--chown=<user>:`, a
+username uses the primary GID from its `/etc/passwd` entry. A numeric UID uses
+the same numeric value for the GID, without looking up `/etc/passwd`. For example,
+`--chown=1000:` sets both the UID and GID to 1000, even if that user's primary
+GID in `/etc/passwd` is different.
 
 ```dockerfile
 COPY --chown=55:mygroup files* /somedir/
 COPY --chown=bin files* /somedir/
+COPY --chown=bin: files* /somedir/
 COPY --chown=1 files* /somedir/
 COPY --chown=10:11 files* /somedir/
 COPY --chown=myuser:mygroup --chmod=644 files* /somedir/
@@ -1917,7 +1922,9 @@ COPY --chown=myuser:mygroup --chmod=644 files* /somedir/
 When using names instead of numeric IDs, BuildKit resolves them using
 `/etc/passwd` and `/etc/group` in the container's root filesystem. If these
 files are missing or don't contain the specified names, the build fails.
-Numeric IDs don't require this lookup.
+Numeric IDs don't require this lookup. When combined with
+[`--link`](#copy---link), files are copied into an empty filesystem, so names
+can't be resolved and `--chown` must use numeric IDs.
 
 The `--chown` flag is not supported when building Windows containers.
 
